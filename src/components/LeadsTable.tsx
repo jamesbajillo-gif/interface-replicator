@@ -202,44 +202,96 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
 
   const handleDownload = async (lead: LeadData) => {
     try {
-      const filesToDownload = [
-        { path: lead.mainFilePath, name: lead.filename },
-        { path: lead.dialablesFilePath, name: `dialables_${lead.affiliateId}.txt` },
-      ];
+      toast.success("Processing files for download...");
 
-      if (lead.unprocessedFilePath) {
-        filesToDownload.push({
-          path: lead.unprocessedFilePath,
-          name: `unprocessed_${lead.affiliateId}.txt`,
-        });
+      // Download dialables file to get uploaded phone numbers
+      const { data: dialablesData, error: dialablesError } = await supabase.storage
+        .from('lead-files')
+        .download(lead.dialablesFilePath!);
+
+      if (dialablesError) {
+        toast.error("Failed to download dialables file");
+        return;
       }
 
-      for (const file of filesToDownload) {
-        if (!file.path) continue;
-
-        const { data, error } = await supabase.storage
-          .from('lead-files')
-          .download(file.path);
-
-        if (error) {
-          toast.error(`Failed to download ${file.name}`);
-          continue;
+      // Parse dialables file to extract uploaded phone numbers
+      const dialablesText = await dialablesData.text();
+      const dialablesLines = dialablesText.trim().split('\n');
+      const dialablesHeaders = dialablesLines[0].split('\t');
+      const phoneColumnIndex = dialablesHeaders.indexOf(lead.dialablesPhoneColumn);
+      
+      const uploadedPhones = new Set<string>();
+      for (let i = 1; i < dialablesLines.length; i++) {
+        const row = dialablesLines[i].split('\t');
+        if (row[phoneColumnIndex]) {
+          // Normalize phone number (remove non-digits)
+          const normalizedPhone = row[phoneColumnIndex].replace(/\D/g, '');
+          uploadedPhones.add(normalizedPhone);
         }
-
-        // Create download link
-        const url = window.URL.createObjectURL(data);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = file.name;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
       }
 
-      toast.success(`Downloaded ${filesToDownload.length} file(s)`);
+      // Download main file
+      const { data: mainData, error: mainError } = await supabase.storage
+        .from('lead-files')
+        .download(lead.mainFilePath!);
+
+      if (mainError) {
+        toast.error("Failed to download main file");
+        return;
+      }
+
+      // Parse main file and filter out uploaded numbers
+      const mainText = await mainData.text();
+      const mainLines = mainText.trim().split('\n');
+      
+      // Detect delimiter
+      const firstLine = mainLines[0];
+      const commaCount = (firstLine.match(/,/g) || []).length;
+      const semicolonCount = (firstLine.match(/;/g) || []).length;
+      const delimiter = semicolonCount > commaCount ? ';' : ',';
+      
+      const headers = mainLines[0].split(delimiter);
+      const phoneColIndex = headers.indexOf(lead.mainPhoneColumn || '');
+      
+      if (phoneColIndex === -1) {
+        toast.error("Could not find phone column in main file");
+        return;
+      }
+
+      // Filter rows
+      const filteredLines = [mainLines[0]]; // Keep header
+      let filteredCount = 0;
+      
+      for (let i = 1; i < mainLines.length; i++) {
+        const row = mainLines[i].split(delimiter);
+        const phoneNumber = row[phoneColIndex] || '';
+        const normalizedPhone = phoneNumber.replace(/\D/g, '');
+        
+        // Keep row if phone number was NOT uploaded
+        if (!uploadedPhones.has(normalizedPhone)) {
+          filteredLines.push(mainLines[i]);
+          filteredCount++;
+        }
+      }
+
+      // Create filtered CSV
+      const filteredCSV = filteredLines.join('\n');
+      const blob = new Blob([filteredCSV], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      
+      // Download filtered file
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `filtered_${lead.filename}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success(`Downloaded filtered file with ${filteredCount} unuploaded leads (removed ${uploadedPhones.size} uploaded)`);
     } catch (error) {
-      toast.error("Failed to download files");
+      console.error('Download error:', error);
+      toast.error("Failed to process and download files");
     }
   };
 
