@@ -112,36 +112,45 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
     return lines.length - 1; // Exclude header
   };
 
-  const detectDelimiter = (text: string): ',' | ';' => {
+  const detectDelimiter = (text: string): ',' | ';' | '\t' => {
     // Check first line to determine delimiter
     const firstLine = text.trim().split('\n')[0];
     
     // Count occurrences of each delimiter
     const commaCount = (firstLine.match(/,/g) || []).length;
     const semicolonCount = (firstLine.match(/;/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
     
-    // Return the delimiter with more occurrences
+    // Return the delimiter with most occurrences
+    if (tabCount > commaCount && tabCount > semicolonCount) return '\t';
     return semicolonCount > commaCount ? ';' : ',';
   };
 
   const detectPhoneColumn = async (file: File): Promise<string | null> => {
     const text = await file.text();
-    const lines = text.trim().split('\n');
+    const lines = text.trim().split('\n').filter(line => line.trim()); // Remove empty lines
     
-    if (lines.length < 6) return null; // Need at least header + 5 rows
+    if (lines.length < 2) return null; // Need at least header + 1 data row
     
     // Auto-detect delimiter
     const delimiter = detectDelimiter(text);
     const headers = lines[0].split(delimiter).map(h => h.trim());
     
+    // Determine how many rows to check (up to 10 data rows)
+    const rowsToCheck = Math.min(10, lines.length - 1);
+    const minValidPhones = Math.max(3, Math.ceil(rowsToCheck * 0.6)); // At least 60% or minimum 3
+    
     // Check each column
     for (let colIndex = 0; colIndex < headers.length; colIndex++) {
       let validPhoneCount = 0;
       
-      // Check rows 1-5 (or fewer if file is smaller)
-      for (let rowIndex = 1; rowIndex < Math.min(6, lines.length); rowIndex++) {
+      // Check up to 10 data rows
+      for (let rowIndex = 1; rowIndex <= rowsToCheck; rowIndex++) {
         const row = lines[rowIndex].split(delimiter);
-        const cellValue = row[colIndex] || '';
+        const cellValue = (row[colIndex] || '').trim();
+        
+        // Skip empty cells
+        if (!cellValue) continue;
         
         // Remove all non-digit characters
         const digitsOnly = cellValue.replace(/\D/g, '');
@@ -152,8 +161,8 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         }
       }
       
-      // If at least 5 rows have valid phone numbers, this is our column
-      if (validPhoneCount >= 5) {
+      // If enough rows have valid phone numbers (60% threshold or min 3), this is our column
+      if (validPhoneCount >= minValidPhones) {
         return headers[colIndex];
       }
     }
