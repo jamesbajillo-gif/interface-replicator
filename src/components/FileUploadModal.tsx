@@ -41,6 +41,36 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [uploadPercentage, setUploadPercentage] = useState<number>(0);
+  const [bucketExists, setBucketExists] = useState<boolean | null>(null);
+
+  // Check if bucket exists when modal opens
+  const checkBucket = async () => {
+    try {
+      const { data, error } = await supabase.storage.getBucket('lead-files');
+      if (error || !data) {
+        setBucketExists(false);
+        toast({
+          title: "⚠️ Storage Bucket Missing",
+          description: "The 'lead-files' bucket doesn't exist. Please create it in your Supabase dashboard before uploading files.",
+          variant: "destructive",
+        });
+      } else {
+        setBucketExists(true);
+      }
+    } catch (error) {
+      setBucketExists(false);
+      toast({
+        title: "Storage Error",
+        description: "Could not verify storage bucket. Please check your Supabase connection.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Check bucket when modal opens
+  if (open && bucketExists === null) {
+    checkBucket();
+  }
 
   const detectFileType = (filename: string): "main" | "dialables" | "unprocessed" | null => {
     // Unprocessed pattern: contains _unprocessed (check first to prioritize)
@@ -203,6 +233,15 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
       toast({
         title: "Missing files",
         description: "Please upload both Main file and Dialables file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (bucketExists === false) {
+      toast({
+        title: "Cannot upload",
+        description: "Storage bucket 'lead-files' does not exist. Please create it first.",
         variant: "destructive",
       });
       return;
@@ -517,7 +556,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
             </Button>
             <Button 
               onClick={handleUpload} 
-              disabled={!mainFile || !dialablesFile || isProcessing}
+              disabled={!mainFile || !dialablesFile || isProcessing || bucketExists === false}
             >
               {isProcessing ? (
                 <span className="flex items-center gap-2">
