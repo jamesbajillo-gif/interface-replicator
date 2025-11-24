@@ -22,6 +22,8 @@ interface ParsedLeadData {
   uploaded: number;
   mainFilePath: string;
   dialablesFilePath: string;
+  mainPhoneColumn: string | null;
+  dialablesPhoneColumn: string;
 }
 
 interface UploadedFile {
@@ -95,6 +97,41 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
     return lines.length;
   };
 
+  const detectPhoneColumn = async (file: File): Promise<string | null> => {
+    const text = await file.text();
+    const lines = text.trim().split('\n');
+    
+    if (lines.length < 6) return null; // Need at least header + 5 rows
+    
+    const headers = lines[0].split(',').map(h => h.trim());
+    
+    // Check each column
+    for (let colIndex = 0; colIndex < headers.length; colIndex++) {
+      let validPhoneCount = 0;
+      
+      // Check rows 1-5 (or fewer if file is smaller)
+      for (let rowIndex = 1; rowIndex < Math.min(6, lines.length); rowIndex++) {
+        const row = lines[rowIndex].split(',');
+        const cellValue = row[colIndex] || '';
+        
+        // Remove all non-digit characters
+        const digitsOnly = cellValue.replace(/\D/g, '');
+        
+        // Check if it has 10 or 11 digits
+        if (digitsOnly.length === 10 || digitsOnly.length === 11) {
+          validPhoneCount++;
+        }
+      }
+      
+      // If at least 5 rows have valid phone numbers, this is our column
+      if (validPhoneCount >= 5) {
+        return headers[colIndex];
+      }
+    }
+    
+    return null; // No suitable column found
+  };
+
   const parseDialablesFile = async (file: File): Promise<{ entryDate: string; listId: string; affiliateId: string; clickId: string; rowCount: number }> => {
     const text = await file.text();
     const lines = text.trim().split('\n');
@@ -134,10 +171,11 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
     setIsProcessing(true);
 
     try {
-      // Parse files first to get affiliate ID
-      const [mainRowCount, dialablesData] = await Promise.all([
+      // Parse files first to get affiliate ID and detect phone columns
+      const [mainRowCount, dialablesData, mainPhoneColumn] = await Promise.all([
         parseMainFile(mainFile),
         parseDialablesFile(dialablesFile),
+        detectPhoneColumn(mainFile),
       ]);
 
       // Get current user
@@ -184,6 +222,8 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         uploaded: dialablesData.rowCount,
         mainFilePath: mainUploadResult.data.path,
         dialablesFilePath: dialablesUploadResult.data.path,
+        mainPhoneColumn: mainPhoneColumn,
+        dialablesPhoneColumn: 'phone_numbers',
       };
 
       onUploadComplete(parsedData);

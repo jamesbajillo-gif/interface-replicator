@@ -20,6 +20,7 @@ export type Database = {
           click_id: string
           created_at: string | null
           dialables_file_path: string | null
+          dialables_phone_column: string | null
           entry_date: string
           file_size: string
           filename: string
@@ -27,6 +28,7 @@ export type Database = {
           leads: number
           list_id: string
           main_file_path: string | null
+          main_phone_column: string | null
           status: string | null
           updated_at: string | null
           uploaded: number
@@ -37,6 +39,7 @@ export type Database = {
           click_id: string
           created_at?: string | null
           dialables_file_path?: string | null
+          dialables_phone_column?: string | null
           entry_date: string
           file_size: string
           filename: string
@@ -44,6 +47,7 @@ export type Database = {
           leads: number
           list_id: string
           main_file_path?: string | null
+          main_phone_column?: string | null
           status?: string | null
           updated_at?: string | null
           uploaded: number
@@ -54,6 +58,7 @@ export type Database = {
           click_id?: string
           created_at?: string | null
           dialables_file_path?: string | null
+          dialables_phone_column?: string | null
           entry_date?: string
           file_size?: string
           filename?: string
@@ -61,6 +66,7 @@ export type Database = {
           leads?: number
           list_id?: string
           main_file_path?: string | null
+          main_phone_column?: string | null
           status?: string | null
           updated_at?: string | null
           uploaded?: number
