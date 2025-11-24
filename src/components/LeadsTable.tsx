@@ -122,18 +122,25 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
     }
 
     if (data) {
-      const formattedLeads: LeadData[] = data.map((lead, index) => ({
-        id: index + 1,
-        entryDate: lead.entry_date,
-        listId: parseInt(lead.list_id),
-        affiliateId: parseInt(lead.affiliate_id),
-        clickId: lead.click_id,
-        filename: lead.filename,
-        fileSize: lead.file_size,
-        leads: lead.leads.toString(),
-        uploaded: lead.uploaded.toString(),
-        failed: "0%",
-        unprocessed: ((lead as any).unprocessed || 0).toString(),
+      const formattedLeads: LeadData[] = data.map((lead, index) => {
+        const totalLeads = lead.leads;
+        const uploadedLeads = lead.uploaded;
+        const failedPercentage = totalLeads > 0 
+          ? (((totalLeads - uploadedLeads) / totalLeads) * 100).toFixed(2) + '%'
+          : '0%';
+        
+        return {
+          id: index + 1,
+          entryDate: lead.entry_date,
+          listId: parseInt(lead.list_id),
+          affiliateId: parseInt(lead.affiliate_id),
+          clickId: lead.click_id,
+          filename: lead.filename,
+          fileSize: lead.file_size,
+          leads: lead.leads.toString(),
+          uploaded: lead.uploaded.toString(),
+          failed: failedPercentage,
+          unprocessed: ((lead as any).unprocessed || 0).toString(),
         uploadedAt: new Date(lead.created_at).toLocaleString('en-US', {
           year: 'numeric',
           month: '2-digit',
@@ -143,13 +150,14 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
           second: '2-digit',
           hour12: false
         }).replace(',', ''),
-        mainPhoneColumn: lead.main_phone_column,
-        dialablesPhoneColumn: lead.dialables_phone_column || 'phone_numbers',
-        dbId: lead.id,
-        mainFilePath: lead.main_file_path,
-        dialablesFilePath: lead.dialables_file_path,
-        unprocessedFilePath: (lead as any).unprocessed_file_path,
-      }));
+          mainPhoneColumn: lead.main_phone_column,
+          dialablesPhoneColumn: lead.dialables_phone_column || 'phone_numbers',
+          dbId: lead.id,
+          mainFilePath: lead.main_file_path,
+          dialablesFilePath: lead.dialables_file_path,
+          unprocessedFilePath: (lead as any).unprocessed_file_path,
+        };
+      });
       setLeadsData(formattedLeads);
     }
   };
