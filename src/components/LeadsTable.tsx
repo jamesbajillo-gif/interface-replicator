@@ -1,7 +1,10 @@
 import { FileText, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { User } from "@supabase/supabase-js";
 import {
   Table,
   TableBody,
@@ -68,108 +71,86 @@ const SortableHeader = ({
   );
 };
 
-export const LeadsTable = () => {
+interface LeadsTableProps {
+  user: User | null;
+}
+
+export const LeadsTable = ({ user }: LeadsTableProps) => {
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
-  const [leadsData, setLeadsData] = useState<LeadData[]>([
-    {
-      id: 5,
-      entryDate: "2025-09-19",
-      listId: 9265,
-      affiliateId: 21,
-      clickId: "668cae97b4d47d3.00576045",
-      filename: "ID 21 - 668cae97b4d47d3 - 1.csv",
-      fileSize: "16.67 MB",
-      leads: "362,346",
-      uploaded: "95,617",
-      failed: "73.52%",
-      unprocessed: "0",
-      uploadedAt: "2025-11-24 00:45:42",
-    },
-    {
-      id: 4,
-      entryDate: "2025-11-11",
-      listId: 9341,
-      affiliateId: 32,
-      clickId: "368dc4e0e917711.84009355",
-      filename: "TC_Debt_1760105669_1111 - export_1760105669_34094 (3).csv",
-      fileSize: "22.54 MB",
-      leads: "34,094",
-      uploaded: "11,048",
-      failed: "67.59%",
-      unprocessed: "0",
-      uploadedAt: "2025-11-24 00:41:53",
-    },
-    {
-      id: 3,
-      entryDate: "2025-10-17",
-      listId: 9321,
-      affiliateId: 16,
-      clickId: "468ed406a837e21.06053311",
-      filename: "16 - 468ed406a837e21.06053311.csv",
-      fileSize: "34 MB",
-      leads: "387,467",
-      uploaded: "191,761",
-      failed: "50.51%",
-      unprocessed: "0",
-      uploadedAt: "2025-11-24 00:41:03",
-    },
-    {
-      id: 2,
-      entryDate: "2025-10-17",
-      listId: 9323,
-      affiliateId: 16,
-      clickId: "268ed407e9d3402.02040256",
-      filename: "16 - 268ed407e9d3402.02040256.csv",
-      fileSize: "20.36 MB",
-      leads: "139,289",
-      uploaded: "110,596",
-      failed: "20.60%",
-      unprocessed: "0",
-      uploadedAt: "2025-11-24 00:39:32",
-    },
-    {
-      id: 1,
-      entryDate: "2025-10-14",
-      listId: 9313,
-      affiliateId: 16,
-      clickId: "168ee499ab5e157.66293388",
-      filename: "16 - 168ee499ab5e157.66293388.csv",
-      fileSize: "6.2 MB",
-      leads: "328,560",
-      uploaded: "116,609",
-      failed: "64.51%",
-      unprocessed: "0",
-      uploadedAt: "2025-11-24 00:38:31",
-    },
-  ]);
+  const [leadsData, setLeadsData] = useState<LeadData[]>([]);
 
-  const handleUploadComplete = (data: any) => {
-    const newLead: LeadData = {
-      id: Math.max(...leadsData.map(l => l.id)) + 1,
-      entryDate: data.entryDate,
-      listId: parseInt(data.listId),
-      affiliateId: parseInt(data.affiliateId),
-      clickId: data.clickId,
-      filename: data.filename,
-      fileSize: data.fileSize,
-      leads: data.leads.toString(),
-      uploaded: data.uploaded.toString(),
-      failed: "0%",
-      unprocessed: (data.leads - data.uploaded).toString(),
-      uploadedAt: new Date().toLocaleString('en-US', { 
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false 
-      }).replace(',', '')
-    };
-    
-    setLeadsData([newLead, ...leadsData]);
+  // Fetch leads from database
+  useEffect(() => {
+    if (user) {
+      fetchLeads();
+    }
+  }, [user]);
+
+  const fetchLeads = async () => {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      toast.error("Error loading leads");
+      return;
+    }
+
+    if (data) {
+      const formattedLeads: LeadData[] = data.map((lead, index) => ({
+        id: index + 1,
+        entryDate: lead.entry_date,
+        listId: parseInt(lead.list_id),
+        affiliateId: parseInt(lead.affiliate_id),
+        clickId: lead.click_id,
+        filename: lead.filename,
+        fileSize: lead.file_size,
+        leads: lead.leads.toString(),
+        uploaded: lead.uploaded.toString(),
+        failed: "0%",
+        unprocessed: (lead.leads - lead.uploaded).toString(),
+        uploadedAt: new Date(lead.created_at).toLocaleString('en-US', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        }).replace(',', ''),
+      }));
+      setLeadsData(formattedLeads);
+    }
+  };
+
+  const handleUploadComplete = async (data: any) => {
+    if (!user) return;
+
+    // Insert into database
+    const { error } = await supabase
+      .from('leads')
+      .insert({
+        user_id: user.id,
+        entry_date: data.entryDate,
+        list_id: data.listId,
+        affiliate_id: data.affiliateId,
+        click_id: data.clickId,
+        filename: data.filename,
+        file_size: data.fileSize,
+        leads: parseInt(data.leads),
+        uploaded: parseInt(data.uploaded),
+      });
+
+    if (error) {
+      toast.error("Error saving lead data");
+      return;
+    }
+
+    toast.success("Files uploaded successfully!");
+    fetchLeads(); // Refresh the list
   };
 
   const handleSort = (field: SortField) => {
