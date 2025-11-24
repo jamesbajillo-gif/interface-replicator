@@ -465,6 +465,7 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
         open={detailsModalOpen}
         onOpenChange={setDetailsModalOpen}
         leadData={selectedLead}
+        onColumnUpdate={fetchLeads}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
