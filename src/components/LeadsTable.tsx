@@ -44,6 +44,7 @@ interface LeadData {
   dbId: string;
   mainFilePath: string | null;
   dialablesFilePath: string | null;
+  unprocessedFilePath: string | null;
 }
 
 type SortField = keyof LeadData;
@@ -132,7 +133,7 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
         leads: lead.leads.toString(),
         uploaded: lead.uploaded.toString(),
         failed: "0%",
-        unprocessed: (lead.leads - lead.uploaded).toString(),
+        unprocessed: ((lead as any).unprocessed || 0).toString(),
         uploadedAt: new Date(lead.created_at).toLocaleString('en-US', {
           year: 'numeric',
           month: '2-digit',
@@ -147,6 +148,7 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
         dbId: lead.id,
         mainFilePath: lead.main_file_path,
         dialablesFilePath: lead.dialables_file_path,
+        unprocessedFilePath: (lead as any).unprocessed_file_path,
       }));
       setLeadsData(formattedLeads);
     }
@@ -168,8 +170,10 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
         file_size: data.fileSize,
         leads: parseInt(data.leads),
         uploaded: parseInt(data.uploaded),
+        unprocessed: parseInt(data.unprocessed) || 0,
         main_file_path: data.mainFilePath,
         dialables_file_path: data.dialablesFilePath,
+        unprocessed_file_path: data.unprocessedFilePath,
         main_phone_column: data.mainPhoneColumn,
         dialables_phone_column: data.dialablesPhoneColumn,
       });
@@ -198,6 +202,7 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
       const filesToDelete = [];
       if (leadToDelete.mainFilePath) filesToDelete.push(leadToDelete.mainFilePath);
       if (leadToDelete.dialablesFilePath) filesToDelete.push(leadToDelete.dialablesFilePath);
+      if (leadToDelete.unprocessedFilePath) filesToDelete.push(leadToDelete.unprocessedFilePath);
 
       if (filesToDelete.length > 0) {
         const { error: storageError } = await supabase.storage

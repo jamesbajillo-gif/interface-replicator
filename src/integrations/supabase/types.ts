@@ -30,6 +30,7 @@ export type Database = {
           main_file_path: string | null
           main_phone_column: string | null
           status: string | null
+          unprocessed_file_path: string | null
           updated_at: string | null
           uploaded: number
           user_id: string
@@ -49,6 +50,7 @@ export type Database = {
           main_file_path?: string | null
           main_phone_column?: string | null
           status?: string | null
+          unprocessed_file_path?: string | null
           updated_at?: string | null
           uploaded: number
           user_id: string
@@ -68,6 +70,7 @@ export type Database = {
           main_file_path?: string | null
           main_phone_column?: string | null
           status?: string | null
+          unprocessed_file_path?: string | null
           updated_at?: string | null
           uploaded?: number
           user_id?: string

@@ -20,25 +20,32 @@ interface ParsedLeadData {
   fileSize: string;
   leads: number;
   uploaded: number;
+  unprocessed: number;
   mainFilePath: string;
   dialablesFilePath: string;
+  unprocessedFilePath: string | null;
   mainPhoneColumn: string | null;
   dialablesPhoneColumn: string;
 }
 
 interface UploadedFile {
   file: File;
-  type: "main" | "dialables";
+  type: "main" | "dialables" | "unprocessed";
 }
 
 export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUploadModalProps) => {
   const [mainFile, setMainFile] = useState<File | null>(null);
   const [dialablesFile, setDialablesFile] = useState<File | null>(null);
+  const [unprocessedFile, setUnprocessedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const detectFileType = (filename: string): "main" | "dialables" | null => {
-    // Dialables pattern: contains LIST_ or is a .txt file (check first to prioritize)
+  const detectFileType = (filename: string): "main" | "dialables" | "unprocessed" | null => {
+    // Unprocessed pattern: contains _unprocessed (check first to prioritize)
+    if (filename.includes('_unprocessed')) {
+      return "unprocessed";
+    }
+    // Dialables pattern: contains LIST_ or is a .txt file
     if (filename.includes('LIST_') || (!filename.endsWith('.csv') && filename.endsWith('.txt'))) {
       return "dialables";
     }
@@ -65,10 +72,10 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
   };
 
   const processFiles = (files: File[]) => {
-    if (files.length > 2) {
+    if (files.length > 3) {
       toast({
         title: "Too many files",
-        description: "Please upload exactly 2 files: Main file and Dialables file",
+        description: "Please upload 2-3 files: Main file, Dialables file, and optionally Unprocessed file",
         variant: "destructive",
       });
       return;
@@ -81,6 +88,8 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         setMainFile(file);
       } else if (fileType === "dialables" && !dialablesFile) {
         setDialablesFile(file);
+      } else if (fileType === "unprocessed" && !unprocessedFile) {
+        setUnprocessedFile(file);
       } else {
         toast({
           title: "File type detection",
@@ -94,7 +103,13 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
   const parseMainFile = async (file: File): Promise<number> => {
     const text = await file.text();
     const lines = text.trim().split('\n');
-    return lines.length;
+    return lines.length - 1; // Exclude header
+  };
+
+  const parseUnprocessedFile = async (file: File): Promise<number> => {
+    const text = await file.text();
+    const lines = text.trim().split('\n');
+    return lines.length - 1; // Exclude header
   };
 
   const detectDelimiter = (text: string): ',' | ';' => {
@@ -186,10 +201,11 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
 
     try {
       // Parse files first to get affiliate ID and detect phone columns
-      const [mainRowCount, dialablesData, mainPhoneColumn] = await Promise.all([
+      const [mainRowCount, dialablesData, mainPhoneColumn, unprocessedRowCount] = await Promise.all([
         parseMainFile(mainFile),
         parseDialablesFile(dialablesFile),
         detectPhoneColumn(mainFile),
+        unprocessedFile ? parseUnprocessedFile(unprocessedFile) : Promise.resolve(0),
       ]);
 
       // Get current user
@@ -201,7 +217,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
       // Upload files to storage: {user_id}/lead{affiliate_id}/{filename}
       const storagePath = `${user.id}/lead${dialablesData.affiliateId}`;
       
-      const [mainUploadResult, dialablesUploadResult] = await Promise.all([
+      const uploadPromises = [
         supabase.storage
           .from('lead-files')
           .upload(`${storagePath}/${mainFile.name}`, mainFile, {
@@ -214,7 +230,22 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
             cacheControl: '3600',
             upsert: true
           })
-      ]);
+      ];
+
+      // Add unprocessed file upload if it exists
+      if (unprocessedFile) {
+        uploadPromises.push(
+          supabase.storage
+            .from('lead-files')
+            .upload(`${storagePath}/${unprocessedFile.name}`, unprocessedFile, {
+              cacheControl: '3600',
+              upsert: true
+            })
+        );
+      }
+
+      const uploadResults = await Promise.all(uploadPromises);
+      const [mainUploadResult, dialablesUploadResult, unprocessedUploadResult] = uploadResults;
 
       if (mainUploadResult.error) {
         throw new Error(`Main file upload failed: ${mainUploadResult.error.message}`);
@@ -222,8 +253,12 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
       if (dialablesUploadResult.error) {
         throw new Error(`Dialables file upload failed: ${dialablesUploadResult.error.message}`);
       }
+      if (unprocessedUploadResult?.error) {
+        throw new Error(`Unprocessed file upload failed: ${unprocessedUploadResult.error.message}`);
+      }
 
-      const fileSize = ((mainFile.size + dialablesFile.size) / (1024 * 1024)).toFixed(2) + " MB";
+      const totalSize = mainFile.size + dialablesFile.size + (unprocessedFile?.size || 0);
+      const fileSize = (totalSize / (1024 * 1024)).toFixed(2) + " MB";
 
       const parsedData: ParsedLeadData = {
         entryDate: dialablesData.entryDate,
@@ -234,8 +269,10 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         fileSize: fileSize,
         leads: mainRowCount,
         uploaded: dialablesData.rowCount,
+        unprocessed: unprocessedRowCount,
         mainFilePath: mainUploadResult.data.path,
         dialablesFilePath: dialablesUploadResult.data.path,
+        unprocessedFilePath: unprocessedUploadResult?.data?.path || null,
         mainPhoneColumn: mainPhoneColumn,
         dialablesPhoneColumn: 'phone_numbers',
       };
@@ -244,12 +281,13 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
       
       toast({
         title: "Upload successful",
-        description: `Uploaded files to lead${dialablesData.affiliateId} folder and processed ${mainRowCount} leads`,
+        description: `Uploaded ${unprocessedFile ? '3' : '2'} files to lead${dialablesData.affiliateId} folder and processed ${mainRowCount} leads`,
       });
 
       // Reset state
       setMainFile(null);
       setDialablesFile(null);
+      setUnprocessedFile(null);
       onOpenChange(false);
     } catch (error) {
       toast({
@@ -262,11 +300,13 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
     }
   };
 
-  const removeFile = (type: "main" | "dialables") => {
+  const removeFile = (type: "main" | "dialables" | "unprocessed") => {
     if (type === "main") {
       setMainFile(null);
-    } else {
+    } else if (type === "dialables") {
       setDialablesFile(null);
+    } else {
+      setUnprocessedFile(null);
     }
   };
 
@@ -276,7 +316,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         <DialogHeader>
           <DialogTitle>Upload Lead Files</DialogTitle>
           <DialogDescription>
-            Upload exactly 2 files: Main CSV file and Dialables file (should contain LIST_ or be .txt)
+            Upload 2-3 files: Main CSV file, Dialables file (LIST_ or .txt), and optionally Unprocessed file (_unprocessed)
           </DialogDescription>
         </DialogHeader>
 
@@ -351,7 +391,27 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
               </div>
             )}
 
-            {!mainFile && !dialablesFile && (
+            {unprocessedFile && (
+              <div className="flex items-center justify-between p-3 bg-info/10 border border-info/20 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="h-5 w-5 text-info" />
+                  <div>
+                    <p className="text-sm font-medium">Unprocessed File (Optional)</p>
+                    <p className="text-xs text-muted-foreground">{unprocessedFile.name}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeFile("unprocessed")}
+                  className="h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
+            {!mainFile && !dialablesFile && !unprocessedFile && (
               <div className="text-center py-8 text-muted-foreground">
                 <FileText className="mx-auto h-8 w-8 mb-2 opacity-50" />
                 <p className="text-sm">No files uploaded yet</p>
