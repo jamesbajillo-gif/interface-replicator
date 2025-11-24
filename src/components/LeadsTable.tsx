@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { FileUploadModal } from "./FileUploadModal";
+import { LeadDetailsModal } from "./LeadDetailsModal";
 
 interface LeadData {
   id: number;
@@ -28,6 +29,9 @@ interface LeadData {
   failed: string;
   unprocessed: string;
   uploadedAt: string;
+  mainPhoneColumn: string | null;
+  dialablesPhoneColumn: string;
+  dbId: string;
 }
 
 type SortField = keyof LeadData;
@@ -79,6 +83,8 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<LeadData | null>(null);
   const [leadsData, setLeadsData] = useState<LeadData[]>([]);
 
   // Fetch leads from database
@@ -121,6 +127,9 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
           second: '2-digit',
           hour12: false
         }).replace(',', ''),
+        mainPhoneColumn: lead.main_phone_column,
+        dialablesPhoneColumn: lead.dialables_phone_column || 'phone_numbers',
+        dbId: lead.id,
       }));
       setLeadsData(formattedLeads);
     }
@@ -144,6 +153,8 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
         uploaded: parseInt(data.uploaded),
         main_file_path: data.mainFilePath,
         dialables_file_path: data.dialablesFilePath,
+        main_phone_column: data.mainPhoneColumn,
+        dialables_phone_column: data.dialablesPhoneColumn,
       });
 
     if (error) {
@@ -350,6 +361,10 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
                       size="sm"
                       variant="default"
                       className="bg-primary hover:bg-primary/90"
+                      onClick={() => {
+                        setSelectedLead(lead);
+                        setDetailsModalOpen(true);
+                      }}
                     >
                       <FileText className="h-3.5 w-3.5 mr-1.5" />
                       Details
@@ -374,6 +389,12 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
         open={uploadModalOpen} 
         onOpenChange={setUploadModalOpen}
         onUploadComplete={handleUploadComplete}
+      />
+      
+      <LeadDetailsModal 
+        open={detailsModalOpen}
+        onOpenChange={setDetailsModalOpen}
+        leadData={selectedLead}
       />
     </>
   );
