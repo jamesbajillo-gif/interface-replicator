@@ -13,6 +13,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { FileUploadModal } from "./FileUploadModal";
 import { LeadDetailsModal } from "./LeadDetailsModal";
 
@@ -32,6 +42,8 @@ interface LeadData {
   mainPhoneColumn: string | null;
   dialablesPhoneColumn: string;
   dbId: string;
+  mainFilePath: string | null;
+  dialablesFilePath: string | null;
 }
 
 type SortField = keyof LeadData;
@@ -86,6 +98,9 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<LeadData | null>(null);
   const [leadsData, setLeadsData] = useState<LeadData[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [leadToDelete, setLeadToDelete] = useState<LeadData | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch leads from database
   useEffect(() => {
@@ -130,6 +145,8 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
         mainPhoneColumn: lead.main_phone_column,
         dialablesPhoneColumn: lead.dialables_phone_column || 'phone_numbers',
         dbId: lead.id,
+        mainFilePath: lead.main_file_path,
+        dialablesFilePath: lead.dialables_file_path,
       }));
       setLeadsData(formattedLeads);
     }
@@ -164,6 +181,58 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
 
     toast.success("Files uploaded successfully!");
     fetchLeads(); // Refresh the list
+  };
+
+  const handleDeleteClick = (lead: LeadData) => {
+    setLeadToDelete(lead);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!leadToDelete) return;
+
+    setIsDeleting(true);
+
+    try {
+      // Delete files from storage
+      const filesToDelete = [];
+      if (leadToDelete.mainFilePath) filesToDelete.push(leadToDelete.mainFilePath);
+      if (leadToDelete.dialablesFilePath) filesToDelete.push(leadToDelete.dialablesFilePath);
+
+      if (filesToDelete.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from('lead-files')
+          .remove(filesToDelete);
+
+        if (storageError) {
+          console.error("Storage deletion error:", storageError);
+          toast.error("Failed to delete files from storage");
+          return;
+        }
+      }
+
+      // Delete database record
+      const { error: dbError } = await supabase
+        .from('leads')
+        .delete()
+        .eq('id', leadToDelete.dbId);
+
+      if (dbError) {
+        console.error("Database deletion error:", dbError);
+        toast.error("Failed to delete record from database");
+        return;
+      }
+
+      toast.success("Lead deleted successfully!");
+      fetchLeads(); // Refresh the list
+      setDeleteDialogOpen(false);
+      setLeadToDelete(null);
+    } catch (error) {
+      console.error("Delete error:", error);
+      toast.error("An error occurred while deleting");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleSort = (field: SortField) => {
@@ -373,6 +442,7 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
                       size="sm"
                       variant="destructive"
                       className="bg-danger hover:bg-danger/90"
+                      onClick={() => handleDeleteClick(lead)}
                     >
                       <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                       Delete
@@ -396,6 +466,33 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
         onOpenChange={setDetailsModalOpen}
         leadData={selectedLead}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Lead File</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this lead file? This will permanently delete:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>The database record</li>
+                <li>The main CSV file</li>
+                <li>The dialables file</li>
+              </ul>
+              <p className="mt-2 font-semibold">This action cannot be undone.</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting}
+              className="bg-danger hover:bg-danger/90"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };
