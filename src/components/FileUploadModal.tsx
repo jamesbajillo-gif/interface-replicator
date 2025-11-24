@@ -40,6 +40,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>("");
+  const [uploadPercentage, setUploadPercentage] = useState<number>(0);
 
   const detectFileType = (filename: string): "main" | "dialables" | "unprocessed" | null => {
     // Unprocessed pattern: contains _unprocessed (check first to prioritize)
@@ -209,6 +210,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
 
     setIsProcessing(true);
     setUploadProgress("Analyzing files...");
+    setUploadPercentage(0);
 
     try {
       // Parse files first to get affiliate ID and detect phone columns
@@ -217,12 +219,16 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         description: "Analyzing file structure and detecting phone columns...",
       });
 
+      setUploadPercentage(10);
+
       const [mainRowCount, dialablesData, mainPhoneColumn, unprocessedRowCount] = await Promise.all([
         parseMainFile(mainFile),
         parseDialablesFile(dialablesFile),
         detectPhoneColumn(mainFile),
         unprocessedFile ? parseUnprocessedFile(unprocessedFile) : Promise.resolve(0),
       ]);
+
+      setUploadPercentage(25);
 
       if (mainPhoneColumn) {
         toast({
@@ -238,6 +244,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
       }
 
       setUploadProgress("Authenticating...");
+      setUploadPercentage(30);
       
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
@@ -246,6 +253,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
       }
 
       setUploadProgress(`Uploading files to lead${dialablesData.affiliateId}...`);
+      setUploadPercentage(35);
 
       toast({
         title: "Uploading files",
@@ -255,49 +263,65 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
       // Upload files to storage: {user_id}/lead{affiliate_id}/{filename}
       const storagePath = `${user.id}/lead${dialablesData.affiliateId}`;
       
-      const uploadPromises = [
-        supabase.storage
-          .from('lead-files')
-          .upload(`${storagePath}/${mainFile.name}`, mainFile, {
-            cacheControl: '3600',
-            upsert: true
-          }),
-        supabase.storage
-          .from('lead-files')
-          .upload(`${storagePath}/${dialablesFile.name}`, dialablesFile, {
-            cacheControl: '3600',
-            upsert: true
-          })
-      ];
+      // Calculate total size for progress tracking
+      const totalSize = mainFile.size + dialablesFile.size + (unprocessedFile?.size || 0);
+      let uploadedSize = 0;
 
-      // Add unprocessed file upload if it exists
-      if (unprocessedFile) {
-        uploadPromises.push(
-          supabase.storage
-            .from('lead-files')
-            .upload(`${storagePath}/${unprocessedFile.name}`, unprocessedFile, {
-              cacheControl: '3600',
-              upsert: true
-            })
-        );
-      }
-
-      const uploadResults = await Promise.all(uploadPromises);
-      const [mainUploadResult, dialablesUploadResult, unprocessedUploadResult] = uploadResults;
+      // Upload main file
+      setUploadProgress(`Uploading main file (${(mainFile.size / 1024 / 1024).toFixed(2)} MB)...`);
+      const mainUploadResult = await supabase.storage
+        .from('lead-files')
+        .upload(`${storagePath}/${mainFile.name}`, mainFile, {
+          cacheControl: '3600',
+          upsert: true
+        });
 
       if (mainUploadResult.error) {
         throw new Error(`Main file upload failed: ${mainUploadResult.error.message}`);
       }
+
+      uploadedSize += mainFile.size;
+      const progressAfterMain = 35 + Math.floor((uploadedSize / totalSize) * 50);
+      setUploadPercentage(progressAfterMain);
+
+      // Upload dialables file
+      setUploadProgress(`Uploading dialables file (${(dialablesFile.size / 1024 / 1024).toFixed(2)} MB)...`);
+      const dialablesUploadResult = await supabase.storage
+        .from('lead-files')
+        .upload(`${storagePath}/${dialablesFile.name}`, dialablesFile, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
       if (dialablesUploadResult.error) {
         throw new Error(`Dialables file upload failed: ${dialablesUploadResult.error.message}`);
       }
-      if (unprocessedUploadResult?.error) {
-        throw new Error(`Unprocessed file upload failed: ${unprocessedUploadResult.error.message}`);
+
+      uploadedSize += dialablesFile.size;
+      const progressAfterDialables = 35 + Math.floor((uploadedSize / totalSize) * 50);
+      setUploadPercentage(progressAfterDialables);
+
+      // Upload unprocessed file if exists
+      let unprocessedUploadResult;
+      if (unprocessedFile) {
+        setUploadProgress(`Uploading unprocessed file (${(unprocessedFile.size / 1024 / 1024).toFixed(2)} MB)...`);
+        unprocessedUploadResult = await supabase.storage
+          .from('lead-files')
+          .upload(`${storagePath}/${unprocessedFile.name}`, unprocessedFile, {
+            cacheControl: '3600',
+            upsert: true
+          });
+
+        if (unprocessedUploadResult.error) {
+          throw new Error(`Unprocessed file upload failed: ${unprocessedUploadResult.error.message}`);
+        }
+
+        uploadedSize += unprocessedFile.size;
       }
 
+      setUploadPercentage(85);
       setUploadProgress("Saving to database...");
 
-      const totalSize = mainFile.size + dialablesFile.size + (unprocessedFile?.size || 0);
       const fileSize = (totalSize / (1024 * 1024)).toFixed(2) + " MB";
 
       const parsedData: ParsedLeadData = {
@@ -317,8 +341,10 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         dialablesPhoneColumn: 'phone_numbers',
       };
 
+      setUploadPercentage(95);
       onUploadComplete(parsedData);
       
+      setUploadPercentage(100);
       toast({
         title: "✅ Upload successful",
         description: `Processed ${mainRowCount.toLocaleString()} leads from ${unprocessedFile ? '3' : '2'} files`,
@@ -329,6 +355,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
       setDialablesFile(null);
       setUnprocessedFile(null);
       setUploadProgress("");
+      setUploadPercentage(0);
       onOpenChange(false);
     } catch (error) {
       toast({
@@ -337,6 +364,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         variant: "destructive",
       });
       setUploadProgress("");
+      setUploadPercentage(0);
     } finally {
       setIsProcessing(false);
     }
@@ -463,10 +491,21 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
 
           {/* Upload Progress */}
           {isProcessing && uploadProgress && (
-            <div className="rounded-lg bg-primary/10 border border-primary/20 p-4">
-              <div className="flex items-center gap-3">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
-                <p className="text-sm font-medium text-foreground">{uploadProgress}</p>
+            <div className="rounded-lg bg-primary/10 border border-primary/20 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                  <p className="text-sm font-medium text-foreground">{uploadProgress}</p>
+                </div>
+                <span className="text-sm font-bold text-primary">{uploadPercentage}%</span>
+              </div>
+              
+              {/* Progress Bar */}
+              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                <div 
+                  className="bg-primary h-full rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${uploadPercentage}%` }}
+                />
               </div>
             </div>
           )}
