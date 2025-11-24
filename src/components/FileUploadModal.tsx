@@ -33,13 +33,13 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
   const [isProcessing, setIsProcessing] = useState(false);
 
   const detectFileType = (filename: string): "main" | "dialables" | null => {
-    // Main file pattern: ends with .csv and has a hash-like pattern
-    if (filename.endsWith('.csv') && /[a-f0-9]{16,}/.test(filename)) {
-      return "main";
-    }
-    // Dialables pattern: contains LIST_ pattern
-    if (filename.includes('LIST_') || filename.endsWith('.txt')) {
+    // Dialables pattern: contains LIST_ or is a .txt file (check first to prioritize)
+    if (filename.includes('LIST_') || (!filename.endsWith('.csv') && filename.endsWith('.txt'))) {
       return "dialables";
+    }
+    // Main file pattern: any CSV file
+    if (filename.endsWith('.csv')) {
+      return "main";
     }
     return null;
   };
@@ -185,7 +185,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         <DialogHeader>
           <DialogTitle>Upload Lead Files</DialogTitle>
           <DialogDescription>
-            Upload exactly 2 files: Main file (.csv) and Dialables file (LIST_*.txt)
+            Upload exactly 2 files: Main CSV file and Dialables file (should contain LIST_ or be .txt)
           </DialogDescription>
         </DialogHeader>
 
