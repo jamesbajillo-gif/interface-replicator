@@ -97,13 +97,27 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
     return lines.length;
   };
 
+  const detectDelimiter = (text: string): ',' | ';' => {
+    // Check first line to determine delimiter
+    const firstLine = text.trim().split('\n')[0];
+    
+    // Count occurrences of each delimiter
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    
+    // Return the delimiter with more occurrences
+    return semicolonCount > commaCount ? ';' : ',';
+  };
+
   const detectPhoneColumn = async (file: File): Promise<string | null> => {
     const text = await file.text();
     const lines = text.trim().split('\n');
     
     if (lines.length < 6) return null; // Need at least header + 5 rows
     
-    const headers = lines[0].split(',').map(h => h.trim());
+    // Auto-detect delimiter
+    const delimiter = detectDelimiter(text);
+    const headers = lines[0].split(delimiter).map(h => h.trim());
     
     // Check each column
     for (let colIndex = 0; colIndex < headers.length; colIndex++) {
@@ -111,7 +125,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
       
       // Check rows 1-5 (or fewer if file is smaller)
       for (let rowIndex = 1; rowIndex < Math.min(6, lines.length); rowIndex++) {
-        const row = lines[rowIndex].split(',');
+        const row = lines[rowIndex].split(delimiter);
         const cellValue = row[colIndex] || '';
         
         // Remove all non-digit characters
