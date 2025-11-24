@@ -1,4 +1,4 @@
-import { FileText, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Plus } from "lucide-react";
+import { FileText, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Plus, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
@@ -198,6 +198,49 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
   const handleDeleteClick = (lead: LeadData) => {
     setLeadToDelete(lead);
     setDeleteDialogOpen(true);
+  };
+
+  const handleDownload = async (lead: LeadData) => {
+    try {
+      const filesToDownload = [
+        { path: lead.mainFilePath, name: lead.filename },
+        { path: lead.dialablesFilePath, name: `dialables_${lead.affiliateId}.txt` },
+      ];
+
+      if (lead.unprocessedFilePath) {
+        filesToDownload.push({
+          path: lead.unprocessedFilePath,
+          name: `unprocessed_${lead.affiliateId}.txt`,
+        });
+      }
+
+      for (const file of filesToDownload) {
+        if (!file.path) continue;
+
+        const { data, error } = await supabase.storage
+          .from('lead-files')
+          .download(file.path);
+
+        if (error) {
+          toast.error(`Failed to download ${file.name}`);
+          continue;
+        }
+
+        // Create download link
+        const url = window.URL.createObjectURL(data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }
+
+      toast.success(`Downloaded ${filesToDownload.length} file(s)`);
+    } catch (error) {
+      toast.error("Failed to download files");
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -450,6 +493,14 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
                     >
                       <FileText className="h-3.5 w-3.5 mr-1.5" />
                       Details
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDownload(lead)}
+                    >
+                      <Download className="h-3.5 w-3.5 mr-1.5" />
+                      Download
                     </Button>
                     <Button
                       size="sm"
