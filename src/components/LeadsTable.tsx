@@ -163,13 +163,20 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
   };
 
   const handleUploadComplete = async (data: any) => {
-    if (!user) return;
+    // Get current authenticated user
+    const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !currentUser) {
+      toast.error("Authentication error. Please refresh and try again.");
+      console.error("Auth error:", authError);
+      return;
+    }
 
     // Insert into database
     const { error } = await supabase
       .from('leads')
       .insert({
-        user_id: user.id,
+        user_id: currentUser.id,
         entry_date: data.entryDate,
         list_id: data.listId,
         affiliate_id: data.affiliateId,
@@ -187,7 +194,8 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
       });
 
     if (error) {
-      toast.error("Error saving lead data");
+      console.error("Database insert error:", error);
+      toast.error(`Error saving lead data: ${error.message}`);
       return;
     }
 
