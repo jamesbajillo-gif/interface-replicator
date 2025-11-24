@@ -39,6 +39,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
   const [unprocessedFile, setUnprocessedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string>("");
 
   const detectFileType = (filename: string): "main" | "dialables" | "unprocessed" | null => {
     // Unprocessed pattern: contains _unprocessed (check first to prioritize)
@@ -207,9 +208,15 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
     }
 
     setIsProcessing(true);
+    setUploadProgress("Analyzing files...");
 
     try {
       // Parse files first to get affiliate ID and detect phone columns
+      toast({
+        title: "Processing files",
+        description: "Analyzing file structure and detecting phone columns...",
+      });
+
       const [mainRowCount, dialablesData, mainPhoneColumn, unprocessedRowCount] = await Promise.all([
         parseMainFile(mainFile),
         parseDialablesFile(dialablesFile),
@@ -217,11 +224,33 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         unprocessedFile ? parseUnprocessedFile(unprocessedFile) : Promise.resolve(0),
       ]);
 
+      if (mainPhoneColumn) {
+        toast({
+          title: "Phone column detected",
+          description: `Found phone numbers in column: "${mainPhoneColumn}"`,
+        });
+      } else {
+        toast({
+          title: "Warning",
+          description: "Could not auto-detect phone column. You can set it manually later.",
+          variant: "destructive",
+        });
+      }
+
+      setUploadProgress("Authenticating...");
+      
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error("User not authenticated");
       }
+
+      setUploadProgress(`Uploading files to lead${dialablesData.affiliateId}...`);
+
+      toast({
+        title: "Uploading files",
+        description: `Uploading ${unprocessedFile ? '3' : '2'} files to storage...`,
+      });
 
       // Upload files to storage: {user_id}/lead{affiliate_id}/{filename}
       const storagePath = `${user.id}/lead${dialablesData.affiliateId}`;
@@ -266,6 +295,8 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         throw new Error(`Unprocessed file upload failed: ${unprocessedUploadResult.error.message}`);
       }
 
+      setUploadProgress("Saving to database...");
+
       const totalSize = mainFile.size + dialablesFile.size + (unprocessedFile?.size || 0);
       const fileSize = (totalSize / (1024 * 1024)).toFixed(2) + " MB";
 
@@ -289,14 +320,15 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
       onUploadComplete(parsedData);
       
       toast({
-        title: "Upload successful",
-        description: `Uploaded ${unprocessedFile ? '3' : '2'} files to lead${dialablesData.affiliateId} folder and processed ${mainRowCount} leads`,
+        title: "✅ Upload successful",
+        description: `Processed ${mainRowCount.toLocaleString()} leads from ${unprocessedFile ? '3' : '2'} files`,
       });
 
       // Reset state
       setMainFile(null);
       setDialablesFile(null);
       setUnprocessedFile(null);
+      setUploadProgress("");
       onOpenChange(false);
     } catch (error) {
       toast({
@@ -304,6 +336,7 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         description: error instanceof Error ? error.message : "Failed to process files",
         variant: "destructive",
       });
+      setUploadProgress("");
     } finally {
       setIsProcessing(false);
     }
@@ -428,6 +461,16 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
             )}
           </div>
 
+          {/* Upload Progress */}
+          {isProcessing && uploadProgress && (
+            <div className="rounded-lg bg-primary/10 border border-primary/20 p-4">
+              <div className="flex items-center gap-3">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                <p className="text-sm font-medium text-foreground">{uploadProgress}</p>
+              </div>
+            </div>
+          )}
+
           {/* Upload Button */}
           <div className="flex justify-end gap-2 pt-4">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isProcessing}>
@@ -437,7 +480,14 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
               onClick={handleUpload} 
               disabled={!mainFile || !dialablesFile || isProcessing}
             >
-              {isProcessing ? "Processing..." : "Upload & Process"}
+              {isProcessing ? (
+                <span className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Processing...
+                </span>
+              ) : (
+                "Upload & Process"
+              )}
             </Button>
           </div>
         </div>
