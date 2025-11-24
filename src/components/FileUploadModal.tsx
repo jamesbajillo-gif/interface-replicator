@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Upload, X, FileText, CheckCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface FileUploadModalProps {
   open: boolean;
@@ -19,6 +20,8 @@ interface ParsedLeadData {
   fileSize: string;
   leads: number;
   uploaded: number;
+  mainFilePath: string;
+  dialablesFilePath: string;
 }
 
 interface UploadedFile {
@@ -131,10 +134,42 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
     setIsProcessing(true);
 
     try {
+      // Parse files first to get affiliate ID
       const [mainRowCount, dialablesData] = await Promise.all([
         parseMainFile(mainFile),
         parseDialablesFile(dialablesFile),
       ]);
+
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      // Upload files to storage: {user_id}/lead{affiliate_id}/{filename}
+      const storagePath = `${user.id}/lead${dialablesData.affiliateId}`;
+      
+      const [mainUploadResult, dialablesUploadResult] = await Promise.all([
+        supabase.storage
+          .from('lead-files')
+          .upload(`${storagePath}/${mainFile.name}`, mainFile, {
+            cacheControl: '3600',
+            upsert: true
+          }),
+        supabase.storage
+          .from('lead-files')
+          .upload(`${storagePath}/${dialablesFile.name}`, dialablesFile, {
+            cacheControl: '3600',
+            upsert: true
+          })
+      ]);
+
+      if (mainUploadResult.error) {
+        throw new Error(`Main file upload failed: ${mainUploadResult.error.message}`);
+      }
+      if (dialablesUploadResult.error) {
+        throw new Error(`Dialables file upload failed: ${dialablesUploadResult.error.message}`);
+      }
 
       const fileSize = ((mainFile.size + dialablesFile.size) / (1024 * 1024)).toFixed(2) + " MB";
 
@@ -147,13 +182,15 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         fileSize: fileSize,
         leads: mainRowCount,
         uploaded: dialablesData.rowCount,
+        mainFilePath: mainUploadResult.data.path,
+        dialablesFilePath: dialablesUploadResult.data.path,
       };
 
       onUploadComplete(parsedData);
       
       toast({
         title: "Upload successful",
-        description: `Processed ${mainRowCount} leads from main file and ${dialablesData.rowCount} from dialables file`,
+        description: `Uploaded files to lead${dialablesData.affiliateId} folder and processed ${mainRowCount} leads`,
       });
 
       // Reset state

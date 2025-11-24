@@ -19,12 +19,14 @@ export type Database = {
           affiliate_id: string
           click_id: string
           created_at: string | null
+          dialables_file_path: string | null
           entry_date: string
           file_size: string
           filename: string
           id: string
           leads: number
           list_id: string
+          main_file_path: string | null
           status: string | null
           updated_at: string | null
           uploaded: number
@@ -34,12 +36,14 @@ export type Database = {
           affiliate_id: string
           click_id: string
           created_at?: string | null
+          dialables_file_path?: string | null
           entry_date: string
           file_size: string
           filename: string
           id?: string
           leads: number
           list_id: string
+          main_file_path?: string | null
           status?: string | null
           updated_at?: string | null
           uploaded: number
@@ -49,12 +53,14 @@ export type Database = {
           affiliate_id?: string
           click_id?: string
           created_at?: string | null
+          dialables_file_path?: string | null
           entry_date?: string
           file_size?: string
           filename?: string
           id?: string
           leads?: number
           list_id?: string
+          main_file_path?: string | null
           status?: string | null
           updated_at?: string | null
           uploaded?: number
