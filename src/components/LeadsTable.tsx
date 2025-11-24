@@ -1,6 +1,7 @@
-import { FileText, Trash2 } from "lucide-react";
+import { FileText, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
 import {
   Table,
   TableBody,
@@ -98,29 +99,202 @@ const leadsData: LeadData[] = [
   },
 ];
 
+type SortField = keyof LeadData;
+type SortDirection = "asc" | "desc" | null;
+
+interface SortableHeaderProps {
+  field: SortField;
+  label: string;
+  currentSort: SortField | null;
+  currentDirection: SortDirection;
+  onSort: (field: SortField) => void;
+}
+
+const SortableHeader = ({
+  field,
+  label,
+  currentSort,
+  currentDirection,
+  onSort,
+}: SortableHeaderProps) => {
+  const isActive = currentSort === field;
+
+  return (
+    <TableHead
+      className="font-semibold cursor-pointer select-none hover:bg-muted/50 transition-colors"
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-2">
+        <span>{label}</span>
+        {isActive ? (
+          currentDirection === "asc" ? (
+            <ArrowUp className="h-4 w-4 text-primary" />
+          ) : (
+            <ArrowDown className="h-4 w-4 text-primary" />
+          )
+        ) : (
+          <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+        )}
+      </div>
+    </TableHead>
+  );
+};
+
 export const LeadsTable = () => {
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // Toggle through: asc -> desc -> null
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else if (sortDirection === "desc") {
+        setSortField(null);
+        setSortDirection(null);
+      }
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const parseNumber = (value: string): number => {
+    return parseFloat(value.replace(/[,%]/g, ""));
+  };
+
+  const parseFileSize = (size: string): number => {
+    const match = size.match(/([\d.]+)\s*MB/);
+    return match ? parseFloat(match[1]) : 0;
+  };
+
+  const sortedData = [...leadsData].sort((a, b) => {
+    if (!sortField || !sortDirection) return 0;
+
+    let aValue: any = a[sortField];
+    let bValue: any = b[sortField];
+
+    // Handle different data types
+    if (sortField === "fileSize") {
+      aValue = parseFileSize(aValue);
+      bValue = parseFileSize(bValue);
+    } else if (
+      sortField === "leads" ||
+      sortField === "uploaded" ||
+      sortField === "id" ||
+      sortField === "listId" ||
+      sortField === "affiliateId"
+    ) {
+      aValue = parseNumber(String(aValue));
+      bValue = parseNumber(String(bValue));
+    } else if (sortField === "failed") {
+      aValue = parseNumber(aValue);
+      bValue = parseNumber(bValue);
+    } else if (sortField === "unprocessed") {
+      aValue = parseNumber(aValue);
+      bValue = parseNumber(bValue);
+    }
+
+    // Compare values
+    if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+    if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+    return 0;
+  });
+
   return (
     <div className="bg-card rounded-lg border">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="font-semibold">ID</TableHead>
-            <TableHead className="font-semibold">Entry Date</TableHead>
-            <TableHead className="font-semibold">List ID</TableHead>
-            <TableHead className="font-semibold">Affiliate ID</TableHead>
-            <TableHead className="font-semibold">ClickID</TableHead>
-            <TableHead className="font-semibold">Filename</TableHead>
-            <TableHead className="font-semibold">File Size</TableHead>
-            <TableHead className="font-semibold">Leads</TableHead>
-            <TableHead className="font-semibold">Uploaded</TableHead>
-            <TableHead className="font-semibold">Failed</TableHead>
-            <TableHead className="font-semibold">Unprocessed</TableHead>
-            <TableHead className="font-semibold">Uploaded At</TableHead>
+            <SortableHeader
+              field="id"
+              label="ID"
+              currentSort={sortField}
+              currentDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortableHeader
+              field="entryDate"
+              label="Entry Date"
+              currentSort={sortField}
+              currentDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortableHeader
+              field="listId"
+              label="List ID"
+              currentSort={sortField}
+              currentDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortableHeader
+              field="affiliateId"
+              label="Affiliate ID"
+              currentSort={sortField}
+              currentDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortableHeader
+              field="clickId"
+              label="ClickID"
+              currentSort={sortField}
+              currentDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortableHeader
+              field="filename"
+              label="Filename"
+              currentSort={sortField}
+              currentDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortableHeader
+              field="fileSize"
+              label="File Size"
+              currentSort={sortField}
+              currentDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortableHeader
+              field="leads"
+              label="Leads"
+              currentSort={sortField}
+              currentDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortableHeader
+              field="uploaded"
+              label="Uploaded"
+              currentSort={sortField}
+              currentDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortableHeader
+              field="failed"
+              label="Failed"
+              currentSort={sortField}
+              currentDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortableHeader
+              field="unprocessed"
+              label="Unprocessed"
+              currentSort={sortField}
+              currentDirection={sortDirection}
+              onSort={handleSort}
+            />
+            <SortableHeader
+              field="uploadedAt"
+              label="Uploaded At"
+              currentSort={sortField}
+              currentDirection={sortDirection}
+              onSort={handleSort}
+            />
             <TableHead className="font-semibold">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {leadsData.map((lead) => (
+          {sortedData.map((lead) => (
             <TableRow key={lead.id}>
               <TableCell className="font-medium">{lead.id}</TableCell>
               <TableCell>{lead.entryDate}</TableCell>
