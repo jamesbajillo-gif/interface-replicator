@@ -142,6 +142,8 @@ export const LeadsTable = ({ user }: LeadsTableProps) => {
         file_size: data.fileSize,
         leads: parseInt(data.leads),
         uploaded: parseInt(data.uploaded),
+        main_file_path: data.mainFilePath,
+        dialables_file_path: data.dialablesFilePath,
       });
 
     if (error) {
