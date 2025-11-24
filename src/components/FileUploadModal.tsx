@@ -260,8 +260,8 @@ export const FileUploadModal = ({ open, onOpenChange, onUploadComplete }: FileUp
         description: `Uploading ${unprocessedFile ? '3' : '2'} files to storage...`,
       });
 
-      // Upload files to storage: {user_id}/lead{affiliate_id}/{filename}
-      const storagePath = `${user.id}/lead${dialablesData.affiliateId}`;
+      // Upload files to storage: lead{affiliate_id}/{filename}
+      const storagePath = `lead${dialablesData.affiliateId}`;
       
       // Calculate total size for progress tracking
       const totalSize = mainFile.size + dialablesFile.size + (unprocessedFile?.size || 0);
