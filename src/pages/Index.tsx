@@ -46,7 +46,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader user={user} />
-      <main className="container mx-auto px-8 py-8">
+      <main className="w-full px-8 py-8">
         <StatsCards />
         <SearchBar />
         <LeadsTable user={user} />
